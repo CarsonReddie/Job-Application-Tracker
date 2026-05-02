@@ -4,3 +4,7 @@ applications.json
 settings.json
 .venv/
 venv/
+dist/
+build/
+*.spec
+JobTracker-Setup-*.exe

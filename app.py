@@ -7,6 +7,7 @@ import io
 import json
 import os
 import secrets
+import sys
 import uuid
 import webbrowser
 from datetime import datetime, timedelta
@@ -20,16 +21,32 @@ STATUSES = ["applied", "interview", "offer", "rejected", "ghosted", "withdrawn"]
 # ---------------------------------------------------------------------------
 # Paths
 # ---------------------------------------------------------------------------
-BASE_DIR = Path(__file__).parent.resolve()
-DATA_FILE = BASE_DIR / "applications.json"
-STATIC_DIR = BASE_DIR / "static"
+FROZEN = getattr(sys, 'frozen', False)
+
+if FROZEN:
+    # Running as compiled executable (PyInstaller)
+    RESOURCE_DIR = Path(sys._MEIPASS)
+else:
+    # Running as script
+    RESOURCE_DIR = Path(__file__).parent.resolve()
+
+STATIC_DIR = RESOURCE_DIR / "static"
+
+# Data & settings persist in user's app directory (not bundled)
+if os.name == 'nt':
+    DATA_DIR = Path(os.environ.get('APPDATA', str(Path.home()))) / 'JobTracker'
+else:
+    DATA_DIR = Path.home() / '.jobtracker'
+DATA_DIR.mkdir(parents=True, exist_ok=True)
+
+DATA_FILE = DATA_DIR / "applications.json"
 
 app = Flask(__name__, static_folder=str(STATIC_DIR))
 
 # ---------------------------------------------------------------------------
 # Settings
 # ---------------------------------------------------------------------------
-SETTINGS_FILE = BASE_DIR / "settings.json"
+SETTINGS_FILE = DATA_DIR / "settings.json"
 
 DEFAULT_TEMPLATES = [
     {"id": "tpl_followup_applied", "name": "Follow-up after applying", "subject": "Following up on {{role}} application",
