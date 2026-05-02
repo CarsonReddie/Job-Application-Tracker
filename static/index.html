@@ -33,6 +33,26 @@
       --accent:    #e8e7e1;
     }
   }
+  html.theme-dark {
+    --bg:        #1c1c1a;
+    --surface:   #252523;
+    --surface2:  #2e2e2b;
+    --border:    rgba(255,255,255,0.10);
+    --border-md: rgba(255,255,255,0.18);
+    --text:      #e8e7e1;
+    --muted:     #9a9990;
+    --accent:    #e8e7e1;
+  }
+  html.theme-light {
+    --bg:        #f5f4f0;
+    --surface:   #ffffff;
+    --surface2:  #f0efe9;
+    --border:    rgba(0,0,0,0.10);
+    --border-md: rgba(0,0,0,0.18);
+    --text:      #1a1a18;
+    --muted:     #6b6b66;
+    --accent:    #1a1a18;
+  }
 
   body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); font-size: 14px; min-height: 100vh; }
 
@@ -152,7 +172,8 @@
   .detail-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1rem; }
   .detail-title { font-size: 17px; font-weight: 600; }
   .detail-role  { font-size: 14px; color: var(--muted); margin-top: 2px; }
-  .detail-grid  { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 1rem; }
+  .detail-grid  { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 1rem; }
+  @media (max-width: 900px) { .detail-grid { grid-template-columns: repeat(2, 1fr); } }
   .detail-item label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; display: block; margin-bottom: 3px; }
   .detail-item span  { font-size: 14px; }
   .detail-notes { background: var(--surface2); border-radius: var(--radius); padding: 0.75rem 1rem; font-size: 13px; color: var(--muted); white-space: pre-wrap; }
@@ -364,6 +385,7 @@
       <div class="detail-item"><label>Applied</label><span id="d-date"></span></div>
       <div class="detail-item"><label>Location</label><span id="d-location"></span></div>
       <div class="detail-item"><label>Salary</label><span id="d-salary"></span></div>
+      <div class="detail-item"><label>Source</label><span id="d-source"></span></div>
     </div>
     <div id="d-url-wrap" style="margin-bottom:0.75rem;display:none">
       <a id="d-url" href="#" target="_blank" style="font-size:13px;color:#185fa5">View job posting ↗</a>
@@ -416,8 +438,25 @@
     </div>
 
     <div class="row2">
-      <div class="field"><label>Company *</label><input type="text" id="f-company" placeholder="Acme Corp" /></div>
-      <div class="field"><label>Role *</label><input type="text" id="f-role" placeholder="Security Analyst" /></div>
+      <div class="field"><label>Company</label><input type="text" id="f-company" placeholder="Acme Inc." /></div>
+      <div class="field"><label>Role</label><input type="text" id="f-role" placeholder="Software Engineer" /></div>
+    </div>
+    <div class="row2">
+      <div class="field"><label>Date applied</label><input type="date" id="f-date" /></div>
+      <div class="field"><label>Source</label>
+        <select id="f-source">
+          <option value="">— None —</option>
+          <option value="linkedin">LinkedIn</option>
+          <option value="indeed">Indeed</option>
+          <option value="glassdoor">Glassdoor</option>
+          <option value="company_site">Company Site</option>
+          <option value="referral">Referral</option>
+          <option value="recruiter">Recruiter</option>
+          <option value="job_fair">Job Fair</option>
+          <option value="twitter">Twitter/X</option>
+          <option value="other">Other</option>
+        </select>
+      </div>
     </div>
     <div class="row2">
       <div class="field"><label>Status</label>
@@ -430,10 +469,9 @@
           <option value="withdrawn">Withdrawn</option>
         </select>
       </div>
-      <div class="field"><label>Date applied</label><input type="date" id="f-date" /></div>
+      <div class="field"><label>Location</label><input type="text" id="f-location" placeholder="Remote, Pensacola FL…" /></div>
     </div>
     <div class="row2">
-      <div class="field"><label>Location</label><input type="text" id="f-location" placeholder="Remote, Pensacola FL…" /></div>
       <div class="field"><label>Salary range</label><input type="text" id="f-salary" placeholder="$70k–$90k" /></div>
     </div>
     <div class="field"><label>Notes</label><textarea id="f-notes" placeholder="Recruiter name, next steps, key requirements…"></textarea></div>
@@ -479,6 +517,18 @@
       <div class="setting-row">
         <span style="font-size:12px;color:var(--muted)">Alert when an application is idle in Applied or Interview for more than:</span>
         <input type="number" id="s-reminderDays" min="1" max="90" value="14" />
+      </div>
+    </div>
+    <hr class="divider" />
+    <div class="field">
+      <label>Appearance</label>
+      <div class="setting-row">
+        <span style="font-size:12px;color:var(--muted)">Override system theme preference:</span>
+        <select id="s-theme" style="width:120px;height:32px" onchange="applyTheme(this.value)">
+          <option value="auto">Auto (System)</option>
+          <option value="dark">Dark</option>
+          <option value="light">Light</option>
+        </select>
       </div>
     </div>
     <hr class="divider" />
@@ -648,6 +698,8 @@ function selectApp(id) {
   document.getElementById('d-date').textContent = fmt(a.date);
   document.getElementById('d-location').textContent = a.location || '—';
   document.getElementById('d-salary').textContent = a.salary || '—';
+  const sourceLabels = {linkedin:'LinkedIn',indeed:'Indeed',glassdoor:'Glassdoor',company_site:'Company Site',referral:'Referral',recruiter:'Recruiter',job_fair:'Job Fair',twitter:'Twitter/X',other:'Other'};
+  document.getElementById('d-source').textContent = (sourceLabels[a.source] || a.source || '—');
   const urlWrap = document.getElementById('d-url-wrap');
   if (a.url) { document.getElementById('d-url').href = a.url; urlWrap.style.display='block'; }
   else urlWrap.style.display='none';
@@ -769,6 +821,7 @@ function openModal(id=null) {
   document.getElementById('f-role').value     = a?.role || '';
   document.getElementById('f-status').value   = a?.status || 'applied';
   document.getElementById('f-date').value     = a?.date || today();
+  document.getElementById('f-source').value   = a?.source || '';
   document.getElementById('f-location').value = a?.location || '';
   document.getElementById('f-salary').value   = a?.salary || '';
   document.getElementById('f-notes').value    = a?.notes || '';
@@ -789,6 +842,7 @@ async function saveApp() {
     company, role,
     status:   document.getElementById('f-status').value,
     date:     document.getElementById('f-date').value || today(),
+    source:   document.getElementById('f-source').value,
     location: document.getElementById('f-location').value,
     salary:   document.getElementById('f-salary').value,
     url:      document.getElementById('f-url').value,
@@ -848,6 +902,29 @@ async function saveSettings() {
   closeSettings();
   loadReminders();
   toast('Settings saved');
+}
+
+// ---- Theme ----
+let themePref = 'auto';
+
+function applyTheme(pref) {
+  themePref = pref;
+  const html = document.documentElement;
+  html.classList.remove('theme-dark', 'theme-light');
+  if (pref === 'dark') html.classList.add('theme-dark');
+  else if (pref === 'light') html.classList.add('theme-light');
+}
+
+function saveThemePref() {
+  localStorage.setItem('jt-theme', themePref);
+}
+
+function loadThemePref() {
+  const saved = localStorage.getItem('jt-theme');
+  themePref = saved || 'auto';
+  applyTheme(themePref);
+  const sel = document.getElementById('s-theme');
+  if (sel) sel.value = themePref;
 }
 
 // ---- View toggle ----
@@ -1308,7 +1385,8 @@ async function removeTag(appId, tag) {
   if (selectedId === appId) selectApp(appId);
 }
 
-loadApps();
+loadThemePref();
+checkAuth();
 </script>
 </body>
 </html>

@@ -217,6 +217,7 @@ def add_app():
         "url":      data.get("url", "").strip(),
         "notes":    data.get("notes", "").strip(),
         "tags":     [t.strip().lower() for t in (data.get("tags") or []) if t.strip()],
+        "source":   data.get("source", "").strip(),
         "created":  now,
         "last_activity_date": today_str,
         "history": [{"status": status, "at": now}],
@@ -244,6 +245,7 @@ def update_app(app_id):
                 "url":      data.get("url", a.get("url", "")).strip(),
                 "notes":    data.get("notes", a.get("notes", "")).strip(),
                 "tags":     [t.strip().lower() for t in (data.get("tags") or a.get("tags", [])) if t.strip()],
+                "source":   data.get("source", a.get("source", "")).strip(),
                 "updated":  datetime.now().isoformat(),
             })
             if new_status != old_status:
@@ -547,7 +549,7 @@ def delete_template(tpl_id):
 # ---------------------------------------------------------------------------
 # CSV Export / Import
 # ---------------------------------------------------------------------------
-CSV_FIELDS = ["company", "role", "status", "date", "location", "salary", "url", "notes", "created"]
+CSV_FIELDS = ["company", "role", "status", "date", "location", "salary", "url", "notes", "source", "tags", "created"]
 
 @app.route("/api/export/csv", methods=["GET"])
 @require_auth
@@ -593,6 +595,8 @@ def import_csv():
             "salary": (row.get("salary") or "").strip(),
             "url": (row.get("url") or "").strip(),
             "notes": (row.get("notes") or "").strip(),
+            "source": (row.get("source") or "").strip(),
+            "tags": [t.strip().lower() for t in (row.get("tags") or "").split(",") if t.strip()],
             "created": now,
             "last_activity_date": today_str,
             "history": [{"status": row.get("status", "applied").strip(), "at": now}],
