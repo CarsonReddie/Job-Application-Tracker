@@ -125,3 +125,7 @@ jobtracker
 | Linux/macOS | `~/.jobtracker/applications.json` |
 
 When running from source (not compiled), data stays in the project folder as `applications.json`.
+
+
+<img width="2544" height="1424" alt="image" src="https://github.com/user-attachments/assets/56b88479-9e44-46c5-adeb-ed8ca843bc4d" />
+
