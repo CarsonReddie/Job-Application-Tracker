@@ -172,7 +172,10 @@ def scrape_url(url: str) -> str:
 
 @app.route("/")
 def index():
-    return send_from_directory(STATIC_DIR, "index.html")
+    if FROZEN:
+        with open(STATIC_DIR / "index.html", "r", encoding="utf-8") as f:
+            return f.read()
+    return send_from_directory(str(STATIC_DIR), "index.html")
 
 @app.route("/api/auth", methods=["POST"])
 def auth_login():
