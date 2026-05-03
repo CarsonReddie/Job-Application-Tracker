@@ -68,6 +68,7 @@ DEFAULT_TEMPLATES = [
 def default_settings():
     return {
         "reminder_days": 14,
+        "weekly_goal": 5,
         "your_name": "",
         "email_templates": DEFAULT_TEMPLATES,
         "auth": {"enabled": False, "hash": "", "salt": ""},
@@ -285,6 +286,50 @@ def delete_app(app_id):
     apps = [a for a in apps if a["id"] != app_id]
     save_apps(apps)
     return jsonify({"ok": True})
+
+@app.route("/api/apps/check-duplicate", methods=["POST"])
+def check_duplicate():
+    data = request.json
+    company = (data.get("company") or "").strip().lower()
+    role = (data.get("role") or "").strip().lower()
+    exclude_id = data.get("exclude_id")
+    if not company:
+        return jsonify({"duplicate": False})
+    apps = load_apps()
+    for a in apps:
+        if exclude_id and a.get("id") == exclude_id:
+            continue
+        if a.get("company", "").strip().lower() == company:
+            if not role or a.get("role", "").strip().lower() == role:
+                return jsonify({"duplicate": True, "match": {"id": a["id"], "company": a["company"], "role": a["role"], "status": a["status"]}})
+    return jsonify({"duplicate": False})
+
+# ---------------------------------------------------------------------------
+# Weekly Goals
+# ---------------------------------------------------------------------------
+
+@app.route("/api/goals", methods=["GET"])
+def get_goals():
+    settings = load_settings()
+    target = settings.get("weekly_goal", 5)
+    apps = load_apps()
+    now = datetime.now()
+    week_start = (now - timedelta(days=now.weekday())).replace(hour=0, minute=0, second=0, microsecond=0)
+    this_week = [a for a in apps if a.get("created") and datetime.fromisoformat(a["created"]) >= week_start]
+    return jsonify({
+        "target": target,
+        "count": len(this_week),
+        "remaining": max(0, target - len(this_week)),
+    })
+
+@app.route("/api/goals", methods=["PUT"])
+@require_auth
+def update_goals():
+    data = request.json
+    settings = load_settings()
+    settings["weekly_goal"] = max(1, int(data.get("target", 5)))
+    save_settings(settings)
+    return jsonify({"ok": True, "target": settings["weekly_goal"]})
 
 # ---------------------------------------------------------------------------
 # Tags

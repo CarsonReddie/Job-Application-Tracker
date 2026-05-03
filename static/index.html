@@ -162,6 +162,18 @@
   .scrape-status.success { color: #27500a; }
   .scrape-status.error   { color: #791f1f; }
 
+  /* Duplicate warning */
+  .dup-warning { font-size: 12px; padding: 6px 10px; background: #fdf3e0; border: 0.5px solid #e5c76a; border-radius: var(--radius); margin-bottom: 0.75rem; color: #5a3a06; }
+  .dup-warning a { color: #5a3a06; text-decoration: underline; cursor: pointer; }
+
+  /* Goal progress */
+  .goal-progress { background: var(--surface); border: 0.5px solid var(--border); border-radius: var(--radius); padding: 0.75rem 1rem; }
+  .goal-label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 6px; font-weight: 600; }
+  .goal-bar-wrap { background: var(--surface2); border-radius: 6px; height: 8px; overflow: hidden; }
+  .goal-bar { height: 100%; border-radius: 6px; background: var(--green); transition: width 0.3s; }
+  .goal-bar.complete { background: #22c55e; }
+  .goal-text { font-size: 12px; color: var(--muted); margin-top: 4px; }
+
   /* Spinner */
   @keyframes spin { to { transform: rotate(360deg); } }
   .spinner { display: inline-block; width: 12px; height: 12px; border: 2px solid var(--border-md); border-top-color: var(--muted); border-radius: 50%; animation: spin 0.7s linear infinite; vertical-align: middle; }
@@ -347,6 +359,7 @@
   </div>
 
   <div class="stats" id="stats"></div>
+  <div id="goalWrap" style="margin-bottom:1.5rem"></div>
   <div class="chips" id="chips"></div>
   <div id="tagFilterWrap"></div>
 
@@ -438,9 +451,10 @@
     </div>
 
     <div class="row2">
-      <div class="field"><label>Company</label><input type="text" id="f-company" placeholder="Acme Inc." /></div>
-      <div class="field"><label>Role</label><input type="text" id="f-role" placeholder="Software Engineer" /></div>
+      <div class="field"><label>Company</label><input type="text" id="f-company" placeholder="Acme Inc." oninput="checkDuplicate()" /></div>
+      <div class="field"><label>Role</label><input type="text" id="f-role" placeholder="Software Engineer" oninput="checkDuplicate()" /></div>
     </div>
+    <div id="dupWarning" class="dup-warning" style="display:none"></div>
     <div class="row2">
       <div class="field"><label>Date applied</label><input type="date" id="f-date" /></div>
       <div class="field"><label>Source</label>
@@ -519,6 +533,13 @@
         <input type="number" id="s-reminderDays" min="1" max="90" value="14" />
       </div>
     </div>
+    <div class="field">
+      <label>Weekly application goal</label>
+      <div class="setting-row">
+        <span style="font-size:12px;color:var(--muted)">Target number of applications per week:</span>
+        <input type="number" id="s-weeklyGoal" min="1" max="100" value="5" />
+      </div>
+    </div>
     <hr class="divider" />
     <div class="field">
       <label>Appearance</label>
@@ -568,6 +589,10 @@ let editId = null;
 let staleIds = new Set();
 let reminderThreshold = 14;
 let bannerDismissed = false;
+let goalTarget = 5;
+let goalCount = 0;
+let goalRemaining = 0;
+let dupCheckTimeout = null;
 
 const today = () => new Date().toISOString().slice(0,10);
 const fmt = d => d ? new Date(d+'T00:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) : '—';
@@ -589,7 +614,29 @@ async function loadApps() {
   apps = await api('/api/apps');
   await loadTags();
   loadReminders();
+  loadGoals();
   render();
+}
+
+async function loadGoals() {
+  try {
+    const data = await api('/api/goals');
+    goalTarget = data.target || 5;
+    goalCount = data.count || 0;
+    goalRemaining = data.remaining || 0;
+  } catch(e) {}
+  renderGoal();
+}
+
+function renderGoal() {
+  const pct = goalTarget > 0 ? Math.min(100, Math.round((goalCount / goalTarget) * 100)) : 0;
+  const cls = pct >= 100 ? 'complete' : '';
+  document.getElementById('goalWrap').innerHTML = `
+    <div class="goal-progress">
+      <div class="goal-label">Weekly goal</div>
+      <div class="goal-bar-wrap"><div class="goal-bar ${cls}" style="width:${pct}%"></div></div>
+      <div class="goal-text">${goalCount} of ${goalTarget} applications this week ${pct >= 100 ? '✓' : `(${goalRemaining} remaining)`}</div>
+    </div>`;
 }
 
 async function loadReminders() {
@@ -837,16 +884,46 @@ function openModal(id=null) {
   document.getElementById('f-tags').value     = (a?.tags || []).join(', ');
   document.getElementById('scrapeBtn').disabled = !(a?.url?.startsWith('http'));
   document.getElementById('scrape-status').textContent = '';
+  hideDupWarning();
   document.getElementById('overlay').classList.add('open');
   setTimeout(()=>document.getElementById('f-url').focus(), 60);
 }
 
-function closeModal() { document.getElementById('overlay').classList.remove('open'); }
+function closeModal() { document.getElementById('overlay').classList.remove('open'); hideDupWarning(); }
+
+function hideDupWarning() { document.getElementById('dupWarning').style.display = 'none'; }
+
+async function checkDuplicate() {
+  clearTimeout(dupCheckTimeout);
+  const company = document.getElementById('f-company').value.trim();
+  const role = document.getElementById('f-role').value.trim();
+  hideDupWarning();
+  if (!company) return;
+  dupCheckTimeout = setTimeout(async () => {
+    try {
+      const dup = await api('/api/apps/check-duplicate', 'POST', {company, role, exclude_id: editId});
+      if (dup.duplicate && dup.match) {
+        const el = document.getElementById('dupWarning');
+        el.innerHTML = `Possible duplicate: <a onclick="openModal('${dup.match.id}');closeModal()">${esc(dup.match.company)} — ${esc(dup.match.role)}</a> (${dup.match.status})`;
+        el.style.display = 'block';
+      }
+    } catch(e) {}
+  }, 400);
+}
 
 async function saveApp() {
   const company = document.getElementById('f-company').value.trim();
   const role    = document.getElementById('f-role').value.trim();
   if (!company || !role) { alert('Company and role are required.'); return; }
+
+  if (!editId) {
+    const dup = await api('/api/apps/check-duplicate', 'POST', {company, role});
+    if (dup.duplicate && dup.match) {
+      const ok = confirm(`Duplicate: "${dup.match.company}" — "${dup.match.role}" already exists (${dup.match.status}).\n\nAdd anyway?`);
+      if (!ok) return;
+    }
+  }
+
   const data = {
     company, role,
     status:   document.getElementById('f-status').value,
@@ -866,6 +943,7 @@ async function saveApp() {
   } else {
     const created = await api('/api/apps', 'POST', data);
     apps.unshift(created);
+    loadGoals();
     toast('Application added');
   }
   closeModal(); loadReminders(); render();
@@ -897,6 +975,7 @@ document.addEventListener('keydown', e=>{
 // ---- Settings ----
 function openSettings() {
   document.getElementById('s-reminderDays').value = reminderThreshold;
+  document.getElementById('s-weeklyGoal').value = goalTarget;
   document.getElementById('settingsOverlay').classList.add('open');
 }
 
@@ -905,11 +984,16 @@ function closeSettings() { document.getElementById('settingsOverlay').classList.
 async function saveSettings() {
   const days = parseInt(document.getElementById('s-reminderDays').value, 10);
   if (isNaN(days) || days < 1 || days > 90) { alert('Enter a number between 1 and 90.'); return; }
+  const goal = parseInt(document.getElementById('s-weeklyGoal').value, 10);
+  if (isNaN(goal) || goal < 1 || goal > 100) { alert('Enter a weekly goal between 1 and 100.'); return; }
   await api('/api/settings', 'PUT', {reminder_days: days});
+  await api('/api/goals', 'PUT', {target: goal});
   reminderThreshold = days;
+  goalTarget = goal;
   bannerDismissed = false;
   closeSettings();
   loadReminders();
+  renderGoal();
   toast('Settings saved');
 }
 
