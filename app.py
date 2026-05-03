@@ -33,11 +33,15 @@ else:
 STATIC_DIR = RESOURCE_DIR / "static"
 
 # Data & settings persist in user's app directory (not bundled)
-if os.name == 'nt':
-    DATA_DIR = Path(os.environ.get('APPDATA', str(Path.home()))) / 'JobTracker'
+# When running from source, keep data in the project folder for compatibility
+if FROZEN:
+    if os.name == 'nt':
+        DATA_DIR = Path(os.environ.get('APPDATA', str(Path.home()))) / 'JobTracker'
+    else:
+        DATA_DIR = Path.home() / '.jobtracker'
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
 else:
-    DATA_DIR = Path.home() / '.jobtracker'
-DATA_DIR.mkdir(parents=True, exist_ok=True)
+    DATA_DIR = RESOURCE_DIR
 
 DATA_FILE = DATA_DIR / "applications.json"
 
