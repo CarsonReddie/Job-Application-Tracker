@@ -649,10 +649,19 @@ function render() {
     return mf && ms && mt;
   });
 
-  if (sort==='date-desc') list.sort((a,b)=>b.date.localeCompare(a.date));
-  else if (sort==='date-asc') list.sort((a,b)=>a.date.localeCompare(b.date));
-  else if (sort==='company') list.sort((a,b)=>a.company.localeCompare(b.company));
-  else list.sort((a,b)=>STATUSES.indexOf(a.status)-STATUSES.indexOf(b.status));
+  function byDateAsc(a, b) {
+    const da = a.date || '9999-12-31';
+    const db = b.date || '9999-12-31';
+    return da.localeCompare(db);
+  }
+  function byDateDesc(a, b) { return byDateAsc(b, a); }
+  function byCompany(a, b) { return a.company.localeCompare(b.company); }
+  function byStatus(a, b) { return STATUSES.indexOf(a.status) - STATUSES.indexOf(b.status); }
+
+  if (sort==='date-desc') list.sort(byDateDesc);
+  else if (sort==='date-asc') list.sort(byDateAsc);
+  else if (sort==='company') list.sort(byCompany);
+  else list.sort(byStatus);
 
   const tbody = document.getElementById('tbody');
   if (!list.length) {
@@ -678,7 +687,7 @@ function render() {
       </td>
     </tr>`;
   }).join('');
-  if (currentView === 'kanban') renderKanban();
+  if (currentView === 'kanban') renderKanban(sort);
 }
 
 function esc(s) {
@@ -935,7 +944,7 @@ function setView(view) {
   document.getElementById('kanbanView').style.display = view === 'kanban' ? '' : 'none';
   document.getElementById('viewTable').classList.toggle('active', view === 'table');
   document.getElementById('viewKanban').classList.toggle('active', view === 'kanban');
-  if (view === 'kanban') renderKanban();
+  if (view === 'kanban') renderKanban(document.getElementById('sortSel').value);
 }
 
 // ---- CSV Export / Import ----
@@ -965,7 +974,7 @@ async function handleImport(e) {
 // ---- Kanban board ----
 let dragId = null;
 
-function renderKanban() {
+function renderKanban(sort='date-desc') {
   const q = document.getElementById('search').value.toLowerCase();
   const filtered = apps.filter(a => {
     const mf = filterStatus === 'all' || a.status === filterStatus;
@@ -973,6 +982,12 @@ function renderKanban() {
     const mt = !filterTag || (a.tags||[]).includes(filterTag);
     return mf && ms && mt;
   });
+
+  // Apply sort within each column
+  if (sort==='date-desc') filtered.sort(byDateDesc);
+  else if (sort==='date-asc') filtered.sort(byDateAsc);
+  else if (sort==='company') filtered.sort(byCompany);
+  else filtered.sort(byStatus);
 
   const cols = STATUSES.filter(s => s !== 'rejected' && s !== 'ghosted' && s !== 'withdrawn')
     .concat(['rejected', 'ghosted', 'withdrawn']);
@@ -1035,7 +1050,7 @@ async function kanbanDrop(e, newStatus) {
   apps = apps.map(a => a.id === dragId ? updated : a);
   if (selectedId === dragId) selectApp(dragId);
   dragId = null;
-  loadReminders(); render(); renderKanban();
+  loadReminders(); render();
   toast(`${updated.company} → ${STATUS_LABELS[newStatus]}`);
 }
 
