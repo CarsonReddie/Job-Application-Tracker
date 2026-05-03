@@ -637,6 +637,15 @@ function renderChips() {
 function setFilter(s) { filterStatus=s; render(); }
 function dismissBanner() { bannerDismissed=true; document.getElementById('reminderBanner').classList.remove('open'); }
 
+function byDateAsc(a, b) {
+  const da = a.date || '9999-12-31';
+  const db = b.date || '9999-12-31';
+  return da.localeCompare(db);
+}
+function byDateDesc(a, b) { return byDateAsc(b, a); }
+function byCompany(a, b) { return a.company.localeCompare(b.company); }
+function byStatus(a, b) { return STATUSES.indexOf(a.status) - STATUSES.indexOf(b.status); }
+
 function render() {
   renderStats(); renderChips(); renderTagFilter();
   const q = document.getElementById('search').value.toLowerCase();
@@ -648,15 +657,6 @@ function render() {
     const mt = !filterTag || (a.tags||[]).includes(filterTag);
     return mf && ms && mt;
   });
-
-  function byDateAsc(a, b) {
-    const da = a.date || '9999-12-31';
-    const db = b.date || '9999-12-31';
-    return da.localeCompare(db);
-  }
-  function byDateDesc(a, b) { return byDateAsc(b, a); }
-  function byCompany(a, b) { return a.company.localeCompare(b.company); }
-  function byStatus(a, b) { return STATUSES.indexOf(a.status) - STATUSES.indexOf(b.status); }
 
   if (sort==='date-desc') list.sort(byDateDesc);
   else if (sort==='date-asc') list.sort(byDateAsc);
