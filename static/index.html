@@ -174,6 +174,15 @@
   .goal-bar.complete { background: #22c55e; }
   .goal-text { font-size: 12px; color: var(--muted); margin-top: 4px; }
 
+  /* Keyboard focus ring */
+  tr.row-focused { outline: 2px solid var(--accent); outline-offset: -2px; }
+
+  /* Undo toast */
+  .undo-bar { display: none; position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); background: var(--surface); border: 0.5px solid var(--border-md); border-radius: var(--radius); padding: 10px 20px; z-index: 300; box-shadow: 0 4px 16px rgba(0,0,0,0.15); align-items: center; gap: 16px; font-size: 13px; }
+  .undo-bar.open { display: flex; }
+  .undo-bar .undo-btn { background: none; border: none; color: var(--accent); cursor: pointer; font-size: 13px; font-weight: 600; text-decoration: underline; padding: 0; }
+  .undo-bar .undo-countdown { color: var(--muted); font-size: 11px; }
+
   /* Spinner */
   @keyframes spin { to { transform: rotate(360deg); } }
   .spinner { display: inline-block; width: 12px; height: 12px; border: 2px solid var(--border-md); border-top-color: var(--muted); border-radius: 50%; animation: spin 0.7s linear infinite; vertical-align: middle; }
@@ -523,6 +532,7 @@
 </div>
 
 <div class="toast" id="toast"></div>
+<div class="undo-bar" id="undoBar"><span id="undoMsg">Application removed</span><button class="undo-btn" onclick="undoDelete()">Undo</button><span class="undo-countdown" id="undoCount"></span></div>
 <input type="file" id="csvFileInput" accept=".csv" style="display:none" onchange="handleImport(event)" />
 
 <!-- Dashboard Modal -->
@@ -618,6 +628,10 @@ let goalTarget = 5;
 let goalCount = 0;
 let goalRemaining = 0;
 let dupCheckTimeout = null;
+let undoTimer = null;
+let undoSeconds = 5;
+let pendingDelete = null;
+let focusedRowIndex = -1;
 
 const today = () => new Date().toISOString().slice(0,10);
 const fmt = d => d ? new Date(d+'T00:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) : '—';
@@ -719,6 +733,8 @@ function byCompany(a, b) { return a.company.localeCompare(b.company); }
 function byStatus(a, b) { return STATUSES.indexOf(a.status) - STATUSES.indexOf(b.status); }
 
 function render() {
+  focusedRowIndex = -1;
+  clearUndo();
   const hasData = apps.length > 0;
   const q = document.getElementById('search').value.toLowerCase();
   const sort = document.getElementById('sortSel').value;
@@ -789,7 +805,7 @@ function render() {
     const staleBadge = stale ? `<span class="stale-badge"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>Follow-up</span>` : '';
     const tagsHTML = (a.tags||[]).length ? `<div class="tag-chips" style="max-width:140px">${renderTagsInline(a.tags)}</div>` : '<span style="color:var(--muted);font-size:12px">—</span>';
     return `
-    <tr onclick="selectApp('${a.id}')" style="${selectedId===a.id?'background:var(--surface2)':''}">
+    <tr data-app-id="${a.id}" onclick="selectApp('${a.id}')" style="${selectedId===a.id?'background:var(--surface2)':''}">
       <td class="td-company">${esc(a.company)}${staleBadge}</td>
       <td class="td-role">${esc(a.role)}</td>
       <td><span class="badge ${BADGE_CLASS[a.status]}">${STATUS_LABELS[a.status]}</span></td>
@@ -1090,13 +1106,43 @@ async function saveApp() {
   closeModal(); loadReminders(); render();
 }
 
-async function deleteApp(id) {
-  if (!confirm('Remove this application?')) return;
+async function deleteApp(id, skipConfirm=false) {
+  if (!skipConfirm && !confirm('Remove this application?')) return;
+  const app = apps.find(a=>a.id===id);
+  if (!app) return;
+  const idx = apps.findIndex(a=>a.id===id);
+  pendingDelete = { app, idx };
   await api(`/api/apps/${id}`, 'DELETE');
   apps = apps.filter(a=>a.id!==id);
   if (selectedId===id) closeDetail();
-  toast('Application removed');
   loadReminders(); render();
+  showUndoBar(app.company);
+}
+
+function showUndoBar(company) {
+  clearTimeout(undoTimer);
+  undoSeconds = 5;
+  document.getElementById('undoMsg').textContent = `"${company}" removed`;
+  document.getElementById('undoCount').textContent = `${undoSeconds}s`;
+  document.getElementById('undoBar').classList.add('open');
+  undoTimer = setInterval(()=>{
+    undoSeconds--;
+    document.getElementById('undoCount').textContent = `${undoSeconds}s`;
+    if (undoSeconds <= 0) { clearUndo(); }
+  }, 1000);
+}
+
+function hideUndoBar() { document.getElementById('undoBar').classList.remove('open'); }
+function clearUndo() { clearTimeout(undoTimer); pendingDelete = null; hideUndoBar(); }
+
+async function undoDelete() {
+  if (!pendingDelete) return;
+  const {app, idx} = pendingDelete;
+  await api('/api/apps', 'POST', app);
+  apps.splice(idx, 0, app);
+  clearUndo();
+  loadReminders(); render();
+  toast('Application restored');
 }
 
 
@@ -1111,7 +1157,36 @@ function toast(msg) {
 document.addEventListener('keydown', e=>{
   if (e.key==='Escape') { closeModal(); closeDetail(); closeSettings(); }
   if ((e.ctrlKey||e.metaKey) && e.key==='n') { e.preventDefault(); openModal(); }
+
+  if (document.getElementById('overlay').classList.contains('open')) return;
+  if (document.getElementById('settingsOverlay').classList.contains('open')) return;
+  if (document.getElementById('dashOverlay').classList.contains('open')) return;
+  if (document.getElementById('tplOverlay').classList.contains('open')) return;
+
+  const tbody = document.getElementById('tbody');
+  const rows = tbody ? tbody.querySelectorAll('tr') : [];
+  const hasRows = rows.length > 0;
+
+  if (hasRows) {
+    if (e.key === 'ArrowDown' || (e.key === 'j' && !e.target.matches('input,textarea,select'))) {
+      e.preventDefault(); focusedRowIndex = Math.min(focusedRowIndex+1, rows.length-1); focusRow();
+    } else if (e.key === 'ArrowUp' || (e.key === 'k' && !e.target.matches('input,textarea,select'))) {
+      e.preventDefault(); focusedRowIndex = Math.max(focusedRowIndex-1, 0); focusRow();
+    } else if (e.key === 'Enter' && focusedRowIndex >= 0) {
+      e.preventDefault(); selectApp(rows[focusedRowIndex].getAttribute('data-app-id'));
+    } else if ((e.key === 'Delete' || e.key === 'Backspace') && focusedRowIndex >= 0 && !e.target.matches('input,textarea,select')) {
+      e.preventDefault(); deleteApp(rows[focusedRowIndex].getAttribute('data-app-id'), false);
+      focusedRowIndex = Math.min(focusedRowIndex, rows.length-2);
+      if (focusedRowIndex >= 0) focusRow();
+    }
+  }
 });
+
+function focusRow() {
+  const tbody = document.getElementById('tbody');
+  const rows = tbody ? tbody.querySelectorAll('tr') : [];
+  rows.forEach((r,i) => { r.classList.toggle('row-focused', i===focusedRowIndex); });
+}
 
 // ---- Settings ----
 function openSettings() {
