@@ -268,6 +268,26 @@
   .login-box .field { text-align: left; }
   .login-box .login-error { font-size: 12px; color: #791f1f; min-height: 18px; margin-top: 6px; }
 
+  /* Loading Skeleton */
+  .skeleton { background: var(--surface2); border-radius: var(--radius); position: relative; overflow: hidden; }
+  .skeleton::after { content: ''; position: absolute; inset: 0; background: linear-gradient(90deg, transparent, rgba(255,255,255,0.05), transparent); animation: shimmer 1.5s infinite; }
+  @keyframes shimmer { 0% { transform: translateX(-100%); } 100% { transform: translateX(100%); } }
+  .stat-skeleton { height: 60px; }
+  .chip-skeleton { height: 28px; width: 100px; border-radius: 20px; }
+  .row-skeleton { height: 42px; margin-bottom: 0.5px; }
+  .goal-skeleton { height: 56px; }
+
+  /* Empty State Onboarding */
+  .onboarding { text-align: center; padding: 3rem 2rem; max-width: 520px; margin: 0 auto; }
+  .onboarding-icon { font-size: 48px; margin-bottom: 1rem; }
+  .onboarding h3 { font-size: 18px; font-weight: 600; margin-bottom: 0.5rem; }
+  .onboarding p { color: var(--muted); margin-bottom: 1.5rem; font-size: 13px; line-height: 1.5; }
+  .onboarding-tips { text-align: left; background: var(--surface2); border-radius: var(--radius); padding: 1rem; margin-top: 1.5rem; }
+  .onboarding-tips h4 { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); margin-bottom: 0.5rem; }
+  .onboarding-tips ul { list-style: none; padding: 0; margin: 0; }
+  .onboarding-tips li { font-size: 12px; color: var(--muted); padding: 4px 0; }
+  .onboarding-tips li::before { content: '→ '; color: var(--accent); font-weight: 600; }
+
   /* Tags */
   .tag-chips { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
   .tag-chip { font-size: 11px; padding: 3px 10px; border-radius: 12px; background: var(--surface2); color: var(--muted); display: inline-flex; align-items: center; gap: 4px; border: 0.5px solid var(--border); }
@@ -358,8 +378,13 @@
     </div>
   </div>
 
-  <div class="stats" id="stats"></div>
-  <div id="goalWrap" style="margin-bottom:1.5rem"></div>
+  <div class="stats" id="stats">
+    <div class="stat skeleton stat-skeleton"></div>
+    <div class="stat skeleton stat-skeleton"></div>
+    <div class="stat skeleton stat-skeleton"></div>
+    <div class="stat skeleton stat-skeleton"></div>
+  </div>
+  <div id="goalWrap" style="margin-bottom:1.5rem"><div class="goal-progress skeleton goal-skeleton"></div></div>
   <div class="chips" id="chips"></div>
   <div id="tagFilterWrap"></div>
 
@@ -694,9 +719,53 @@ function byCompany(a, b) { return a.company.localeCompare(b.company); }
 function byStatus(a, b) { return STATUSES.indexOf(a.status) - STATUSES.indexOf(b.status); }
 
 function render() {
-  renderStats(); renderChips(); renderTagFilter();
+  const hasData = apps.length > 0;
   const q = document.getElementById('search').value.toLowerCase();
   const sort = document.getElementById('sortSel').value;
+
+  document.getElementById('goalWrap').style.display = hasData ? '' : 'none';
+  document.getElementById('tagFilterWrap').style.display = hasData ? '' : 'none';
+  document.getElementById('reminderBanner').style.display = hasData ? '' : 'none';
+  document.querySelector('.toolbar').style.display = hasData ? '' : 'none';
+  document.getElementById('tableView').style.display = hasData ? '' : 'none';
+  document.getElementById('kanbanView').style.display = hasData ? 'none' : 'none';
+
+  if (!hasData) {
+    renderStats();
+    document.getElementById('goalWrap').innerHTML = '';
+    document.getElementById('chips').innerHTML = '';
+    document.getElementById('tagFilterWrap').innerHTML = '';
+    document.getElementById('reminderBanner').style.display = 'none';
+    document.querySelector('.toolbar').style.display = 'none';
+
+    if (currentView === 'kanban') {
+      document.getElementById('kanbanView').innerHTML = `<div class="onboarding">
+        <div class="onboarding-icon">📋</div>
+        <h3>Start tracking your job applications</h3>
+        <p>Add your first application below and see it appear on the board. Drag cards between columns as your status changes.</p>
+        <button class="btn btn-primary" onclick="openModal()" style="margin-top:0.5rem">+ Add your first application</button>
+      </div>`;
+      document.getElementById('kanbanView').style.display = '';
+    }
+    document.getElementById('tableView').innerHTML = `<div class="onboarding">
+      <div class="onboarding-icon">🚀</div>
+      <h3>Start tracking your job applications</h3>
+      <p>Add your first application and take control of your job search. Never lose track of a follow-up again.</p>
+      <button class="btn btn-primary" onclick="openModal()" style="margin-top:0.5rem">+ Add your first application</button>
+      <div class="onboarding-tips">
+        <h4>Tips to get started</h4>
+        <ul>
+          <li>Paste a job URL to auto-fill company, role, and location</li>
+          <li>Use tags like "remote", "high-paying", or "startup" to categorize</li>
+          <li>Set a weekly application goal in Settings to stay on track</li>
+          <li>Switch to Board view for a visual kanban workflow</li>
+        </ul>
+      </div>
+    </div>`;
+    return;
+  }
+
+  renderStats(); renderChips(); renderTagFilter();
 
   let list = apps.filter(a=>{
     const mf = filterStatus==='all' || a.status===filterStatus;
@@ -872,24 +941,95 @@ function openModal(id=null) {
   editId = id;
   document.getElementById('modal-title').textContent = id ? 'Edit application' : 'Add application';
   const a = id ? apps.find(x=>x.id===id) : null;
-  document.getElementById('f-url').value      = a?.url || '';
-  document.getElementById('f-company').value  = a?.company || '';
-  document.getElementById('f-role').value     = a?.role || '';
-  document.getElementById('f-status').value   = a?.status || 'applied';
-  document.getElementById('f-date').value     = a?.date || today();
-  document.getElementById('f-source').value   = a?.source || '';
-  document.getElementById('f-location').value = a?.location || '';
-  document.getElementById('f-salary').value   = a?.salary || '';
-  document.getElementById('f-notes').value    = a?.notes || '';
-  document.getElementById('f-tags').value     = (a?.tags || []).join(', ');
-  document.getElementById('scrapeBtn').disabled = !(a?.url?.startsWith('http'));
+  if (a) {
+    document.getElementById('f-url').value      = a.url || '';
+    document.getElementById('f-company').value  = a.company || '';
+    document.getElementById('f-role').value     = a.role || '';
+    document.getElementById('f-status').value   = a.status || 'applied';
+    document.getElementById('f-date').value     = a.date || today();
+    document.getElementById('f-source').value   = a.source || '';
+    document.getElementById('f-location').value = a.location || '';
+    document.getElementById('f-salary').value   = a.salary || '';
+    document.getElementById('f-notes').value    = a.notes || '';
+    document.getElementById('f-tags').value     = (a.tags || []).join(', ');
+    document.getElementById('scrapeBtn').disabled = !(a.url?.startsWith('http'));
+    hideDraftRestore();
+  } else {
+    const draft = getDraft();
+    if (draft && (draft.company || draft.role || draft.notes)) {
+      document.getElementById('f-url').value      = draft.url || '';
+      document.getElementById('f-company').value  = draft.company || '';
+      document.getElementById('f-role').value     = draft.role || '';
+      document.getElementById('f-status').value   = draft.status || 'applied';
+      document.getElementById('f-date').value     = draft.date || today();
+      document.getElementById('f-source').value   = draft.source || '';
+      document.getElementById('f-location').value = draft.location || '';
+      document.getElementById('f-salary').value   = draft.salary || '';
+      document.getElementById('f-notes').value    = draft.notes || '';
+      document.getElementById('f-tags').value     = (draft.tags || []).join(', ');
+      showDraftRestore();
+    } else {
+      document.getElementById('f-url').value      = '';
+      document.getElementById('f-company').value  = '';
+      document.getElementById('f-role').value     = '';
+      document.getElementById('f-status').value   = 'applied';
+      document.getElementById('f-date').value     = today();
+      document.getElementById('f-source').value   = '';
+      document.getElementById('f-location').value = '';
+      document.getElementById('f-salary').value   = '';
+      document.getElementById('f-notes').value    = '';
+      document.getElementById('f-tags').value     = '';
+      hideDraftRestore();
+    }
+    document.getElementById('scrapeBtn').disabled = true;
+  }
   document.getElementById('scrape-status').textContent = '';
   hideDupWarning();
   document.getElementById('overlay').classList.add('open');
   setTimeout(()=>document.getElementById('f-url').focus(), 60);
 }
 
-function closeModal() { document.getElementById('overlay').classList.remove('open'); hideDupWarning(); }
+function closeModal() {
+  document.getElementById('overlay').classList.remove('open');
+  hideDupWarning();
+  if (!editId) saveDraft();
+}
+
+const DRAFT_KEY = 'jt-modal-draft';
+function getDraft() {
+  try { return JSON.parse(localStorage.getItem(DRAFT_KEY)) || {}; } catch(e) { return {}; }
+}
+function saveDraft() {
+  const draft = {
+    url: document.getElementById('f-url').value,
+    company: document.getElementById('f-company').value,
+    role: document.getElementById('f-role').value,
+    status: document.getElementById('f-status').value,
+    date: document.getElementById('f-date').value,
+    source: document.getElementById('f-source').value,
+    location: document.getElementById('f-location').value,
+    salary: document.getElementById('f-salary').value,
+    notes: document.getElementById('f-notes').value,
+    tags: document.getElementById('f-tags').value.split(',').map(t=>t.trim()).filter(Boolean),
+  };
+  localStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
+}
+function clearDraft() { localStorage.removeItem(DRAFT_KEY); }
+function showDraftRestore() {
+  let el = document.getElementById('draftRestore');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'draftRestore';
+    el.className = 'dup-warning';
+    el.innerHTML = 'Previous draft restored. <a onclick="clearDraft();closeModal();openModal()">Clear and start fresh</a>';
+    document.querySelector('.modal').insertBefore(el, document.getElementById('dupWarning').nextSibling);
+  }
+  el.style.display = 'block';
+}
+function hideDraftRestore() {
+  const el = document.getElementById('draftRestore');
+  if (el) el.style.display = 'none';
+}
 
 function hideDupWarning() { document.getElementById('dupWarning').style.display = 'none'; }
 
@@ -943,6 +1083,7 @@ async function saveApp() {
   } else {
     const created = await api('/api/apps', 'POST', data);
     apps.unshift(created);
+    clearDraft();
     loadGoals();
     toast('Application added');
   }
